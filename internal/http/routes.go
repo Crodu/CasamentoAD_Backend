@@ -2,6 +2,7 @@ package http
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -300,7 +301,7 @@ func ConfirmPayment(c *gin.Context) {
 	}
 
 	// Log the payload to the console (optional)
-	// fmt.Printf("Received payload: %+v\n", payload)
+	fmt.Printf("Received payload: %+v\n", payload)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Payload received", "data": payload})
 }
