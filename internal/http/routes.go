@@ -2,7 +2,6 @@ package http
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -292,34 +291,53 @@ func GenerateGiftPayment(c *gin.Context) {
 	})
 }
 
-func ConfirmPayment(c *gin.Context) {
+// paymentdata = {
+//   action: "payment.updated",
+//   api_version: "v1",
+//   data: {"id":"123456"},
+//   date_created: "2021-11-01T02:02:02Z",
+//   id: "123456",
+//   live_mode: false,
+//   type: "payment",
+//   user_id: 278927631
+// }
 
-	var payload map[string]interface{}
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
+type PaymentWebhook struct {
+	Action     string `json:"action"`
+	APIVersion string `json:"api_version"`
+	Data       struct {
+		ID string `json:"id"`
+	} `json:"data"`
+	DateCreated string `json:"date_created"`
+	ID          string `json:"id"`
+	LiveMode    bool   `json:"live_mode"`
+	Type        string `json:"type"`
+	UserID      int    `json:"user_id"`
+}
+
+func ConfirmPayment(c *gin.Context) {
+	var input PaymentWebhook
+	db := c.MustGet("db").(*gorm.DB)
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
 
-	// Log the payload to the console (optional)
-	fmt.Printf("Received payload: %+v\n", payload)
+	// Check if the payment ID exists in the database
+	var payment models.Payment
+	if err := db.First(&payment, "payment_id = ?", input.Data.ID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Payment not found"})
+		return
+	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Payload received", "data": payload})
+	// Update the payment status to confirmed
+	if err := db.Model(&payment).Update("status", "confirmed").Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm payment"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Payment confirmed successfully"})
 }
-
-// var input models.Payment
-// db := c.MustGet("db").(*gorm.DB)
-// if err := c.ShouldBindJSON(&input); err != nil {
-// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-// 	return
-// }
-
-// if err := db.Model(&models.Payment{}).Where("id = ?", input.ID).Update("status", "confirmed").Error; err != nil {
-// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm payment"})
-// 	return
-// }
-
-// c.JSON(http.StatusOK, gin.H{"message": "Payment confirmed successfully"})
-// }
 
 func CancelPaymentIfTimeout(c *gin.Context) {
 	var timeLimit = 30 // minutes
