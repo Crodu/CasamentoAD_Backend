@@ -292,20 +292,33 @@ func GenerateGiftPayment(c *gin.Context) {
 }
 
 func ConfirmPayment(c *gin.Context) {
-	var input models.Payment
-	db := c.MustGet("db").(*gorm.DB)
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+
+	var payload map[string]interface{}
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input", "details": err.Error()})
 		return
 	}
 
-	if err := db.Model(&models.Payment{}).Where("id = ?", input.ID).Update("status", "confirmed").Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm payment"})
-		return
-	}
+	// Log the payload to the console (optional)
+	// fmt.Printf("Received payload: %+v\n", payload)
 
-	c.JSON(http.StatusOK, gin.H{"message": "Payment confirmed successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Payload received", "data": payload})
 }
+
+// var input models.Payment
+// db := c.MustGet("db").(*gorm.DB)
+// if err := c.ShouldBindJSON(&input); err != nil {
+// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+// 	return
+// }
+
+// if err := db.Model(&models.Payment{}).Where("id = ?", input.ID).Update("status", "confirmed").Error; err != nil {
+// 	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm payment"})
+// 	return
+// }
+
+// c.JSON(http.StatusOK, gin.H{"message": "Payment confirmed successfully"})
+// }
 
 func CancelPaymentIfTimeout(c *gin.Context) {
 	var timeLimit = 30 // minutes
