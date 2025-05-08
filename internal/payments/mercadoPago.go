@@ -8,8 +8,8 @@ import (
 	"github.com/mercadopago/sdk-go/pkg/payment"
 )
 
-func GeneratePayment(value float64, email string, firstName string, lastName string, product string) (*payment.Response, error) {
-	accessToken := "xxxx"
+func GeneratePayment(value float64, email string, firstName string, lastName string, product string, token string) (*payment.Response, error) {
+	accessToken := token
 
 	cfg, err := config.New(accessToken)
 	if err != nil {

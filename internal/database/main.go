@@ -20,6 +20,7 @@ func NewDBConnection() *gorm.DB {
 		&models.Guest{},
 		&models.Gift{},
 		&models.BoughtGift{},
+		&models.Payment{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)

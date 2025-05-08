@@ -3,6 +3,7 @@ package http
 import (
 	"net/http"
 
+	"github.com/Crodu/CasamentoBackend/internal/config"
 	"github.com/Crodu/CasamentoBackend/internal/database"
 	"github.com/gin-gonic/gin"
 )
@@ -30,6 +31,16 @@ func InitServer() {
 		c.Next()
 	})
 
+	r.Use(func(c *gin.Context) {
+		config, err := config.LoadConfig(".")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load config"})
+			return
+		}
+		c.Set("config", config)
+		c.Next()
+	})
+
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "pong",
@@ -46,6 +57,7 @@ func InitServer() {
 	r.GET("/guests/:id", GetGuestByID)
 	r.POST("/guests", CreateGuest)
 	r.POST("/ordergift", GenerateGiftPayment)
+	r.POST("/confirmpayment", ConfirmPayment)
 	// r.GET("/paymenttest", func(c *gin.Context) {
 	// 	response, err := payments.GeneratePayment()
 	// 	if err != nil {

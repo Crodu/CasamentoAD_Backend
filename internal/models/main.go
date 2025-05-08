@@ -70,3 +70,20 @@ type BoughtGift struct {
 	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime" gorm:"default:CURRENT_TIMESTAMP"`
 	UpdatedAt time.Time `json:"updated_at" gorm:"autoUpdateTime" gorm:"default:CURRENT_TIMESTAMP"`
 }
+
+type Payment struct {
+	ID        int       `json:"id" gorm:"primaryKey" gorm:"autoIncrement"`
+	GuestID   int       `json:"guest_id"`
+	GiftID    int       `json:"gift_id"`
+	PaymentID string    `json:"payment_id"`
+	QRCode    string    `json:"qr_code"`
+	Link      string    `json:"link"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime" gorm:"default:CURRENT_TIMESTAMP"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"autoUpdateTime" gorm:"default:CURRENT_TIMESTAMP"`
+}
+
+type PaymentInput struct {
+	GuestID int `json:"guest_id" binding:"required"`
+	GiftID  int `json:"gift_id" binding:"required"`
+}

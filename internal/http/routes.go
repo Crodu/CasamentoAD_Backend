@@ -3,9 +3,12 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"time"
 
 	"gorm.io/gorm"
 
+	"github.com/Crodu/CasamentoBackend/internal/config"
 	"github.com/Crodu/CasamentoBackend/internal/models"
 	"github.com/Crodu/CasamentoBackend/internal/payments"
 	"github.com/gin-gonic/gin"
@@ -197,6 +200,7 @@ type BuyGiftInput struct {
 
 func GenerateGiftPayment(c *gin.Context) {
 	var input BuyGiftInput
+	mercadoPagoKey := c.MustGet("config").(config.Config).MercadoPagoKey
 	db := c.MustGet("db").(*gorm.DB)
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
@@ -207,7 +211,7 @@ func GenerateGiftPayment(c *gin.Context) {
 	var gift models.Gift
 	if err := db.First(&gift, input.GiftID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Gift not found"})
-		
+
 		return
 	}
 
@@ -236,13 +240,48 @@ func GenerateGiftPayment(c *gin.Context) {
 	}
 
 	// Generate payment using Mercado Pago (or any other payment service)
-	response, err := payments.GeneratePayment(gift.Price, input.Email, guest.FirstName, guest.LastName, gift.Name)
+	// Check for existing pending payment
+	var existingPayment models.Payment
+	err := db.Where("gift_id = ? AND guest_id = ? AND status = ?", gift.ID, guest.ID, "pending").First(&existingPayment).Error
+	if err == nil {
+		// Pending payment found, return its details
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Existing pending payment found",
+			"qrcode":  existingPayment.QRCode,
+			"payment": gin.H{ // Reconstruct a minimal payment response
+				"id": existingPayment.PaymentID,
+				"transaction_details": gin.H{
+					"external_resource_url": existingPayment.Link,
+				},
+			},
+		})
+		return
+	} else if err != gorm.ErrRecordNotFound {
+		// An error occurred other than not finding a record
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check for existing payments"})
+		return
+	}
+
+	// No pending payment found, proceed to generate a new one
+	response, err := payments.GeneratePayment(gift.Price, input.Email, guest.FirstName, guest.LastName, gift.Name, mercadoPagoKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate payment"})
 		return
 	}
 
 	qrcode, err := payments.GetQRCode(response)
+	if err := db.Create(&models.Payment{
+		GuestID:   guest.ID,
+		GiftID:    gift.ID,
+		PaymentID: strconv.Itoa(response.ID),
+		QRCode:    qrcode,
+		Status:    "pending",
+		Link:      response.TransactionDetails.ExternalResourceURL,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create payment"})
+		return
+	}
+
 	jsonPayment, err := json.Marshal(response)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -250,4 +289,49 @@ func GenerateGiftPayment(c *gin.Context) {
 		"qrcode":  qrcode,
 		"payment": jsonPayment,
 	})
+}
+
+func ConfirmPayment(c *gin.Context) {
+	var input models.Payment
+	db := c.MustGet("db").(*gorm.DB)
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	if err := db.Model(&models.Payment{}).Where("id = ?", input.ID).Update("status", "confirmed").Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm payment"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Payment confirmed successfully"})
+}
+
+func CancelPaymentIfTimeout(c *gin.Context) {
+	var timeLimit = 30 // minutes
+	var input models.Payment
+	db := c.MustGet("db").(*gorm.DB)
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+	// Calculate the time threshold
+	thresholdTime := time.Now().Add(-time.Duration(timeLimit) * time.Minute)
+
+	// Update payments that are pending and older than the thresholdTime
+	result := db.Model(&models.Payment{}).
+		Where("status = ? AND created_at < ?", "pending", thresholdTime).
+		Update("status", "canceled")
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cancel payments"})
+		return
+	}
+
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "No pending payments found older than the time limit"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Payment canceled successfully"})
 }
