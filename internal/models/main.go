@@ -60,7 +60,7 @@ type GiftInput struct {
 	Name        string  `json:"name" binding:"required"`
 	Description string  `json:"description" binding:"required"`
 	Price       float64 `json:"price" binding:"required"`
-	Link        string  `json:"link" binding:"required"`
+	Link        string  `json:"link"`
 }
 
 type BoughtGift struct {
