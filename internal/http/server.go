@@ -52,6 +52,8 @@ func InitServer() {
 	r.GET("/gifts", GetAllGifts)
 	r.GET("/gifts/:id", GetGiftByID)
 	r.POST("/gifts", CreateGift)
+	r.PUT("/gifts/:id", UpdateGift)
+	r.DELETE("/gifts/:id", DeleteGift)
 	r.POST("/login", Login)
 	r.GET("/guests", GetAllGuests)
 	r.GET("/guests/:id", GetGuestByID)

@@ -156,6 +156,56 @@ func CreateGift(c *gin.Context) {
 	c.JSON(http.StatusCreated, gift)
 }
 
+func UpdateGift(c *gin.Context) {
+	id := c.Param("id")
+	db := c.MustGet("db").(*gorm.DB)
+	var gift models.Gift
+	if err := db.First(&gift, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Gift not found"})
+		return
+	}
+
+	var updatedGift models.GiftInput
+	if err := c.ShouldBindJSON(&updatedGift); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	gift.Name = updatedGift.Name
+	gift.Description = updatedGift.Description
+	gift.Price = updatedGift.Price
+	gift.Link = updatedGift.Link
+
+	if err := db.Save(&gift).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update gift"})
+		return
+	}
+	c.JSON(http.StatusOK, gift)
+}
+
+func DeleteGift(c *gin.Context) {
+	id := c.Param("id")
+	db := c.MustGet("db").(*gorm.DB)
+	var gift models.Gift
+	if err := db.First(&gift, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Gift not found"})
+		return
+	}
+
+	// Check if the gift is already bought
+	var boughtGift models.BoughtGift
+	if err := db.Where("gift_id = ?", id).First(&boughtGift).Error; err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "Cannot delete gift that has been bought"})
+		return
+	}
+
+	if err := db.Delete(&gift).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete gift"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Gift deleted successfully"})
+}
+
 func GetAllBoughtGifts(c *gin.Context) {
 	var boughtGifts []models.BoughtGift
 	db := c.MustGet("db").(*gorm.DB)
@@ -334,6 +384,33 @@ func ConfirmPayment(c *gin.Context) {
 	if err := db.Model(&payment).Update("status", "confirmed").Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm payment"})
 		return
+	}
+
+	// Update the bought gift status
+	var boughtGift models.BoughtGift
+	if err := db.Where("guest_id = ? AND gift_id = ?", payment.GuestID, payment.GiftID).First(&boughtGift).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// Create a new bought gift record if it doesn't exist
+			newBoughtGift := models.BoughtGift{
+				GuestID: payment.GuestID,
+				GiftID:  payment.GiftID,
+			}
+			if err := db.Create(&newBoughtGift).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create bought gift"})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch bought gift"})
+			return
+		}
+	} else {
+		// If it exists, update it
+		boughtGift.GuestID = payment.GuestID
+		boughtGift.GiftID = payment.GiftID
+		if err := db.Save(&boughtGift).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update bought gift"})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Payment confirmed successfully"})
