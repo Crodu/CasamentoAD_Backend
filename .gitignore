@@ -1,2 +1,5 @@
 .env
 /tmp
+./etc.txt
+etc.txt
+tmp/*

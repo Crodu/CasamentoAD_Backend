@@ -11,6 +11,10 @@ import (
 type Config struct {
 	MercadoPagoKey string `mapstructure:"MERCADOPAGO_KEY"`
 	SMTPKey        string `mapstructure:"SMTP_KEY"`
+	S3BucketName   string `mapstructure:"S3_BUCKET_NAME"`
+	S3Region       string `mapstructure:"S3_REGION"`
+	S3AccessKey    string `mapstructure:"S3_ACCESS_KEY"`
+	S3SecretKey    string `mapstructure:"S3_SECRET_KEY"`
 }
 
 // LoadConfig reads configuration from file or environment variables.

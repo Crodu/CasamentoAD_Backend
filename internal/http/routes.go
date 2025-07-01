@@ -248,6 +248,66 @@ type BuyGiftInput struct {
 	Email         string `json:"email"`
 }
 
+func GeneratePreference(c *gin.Context) {
+	var input BuyGiftInput
+	db := c.MustGet("db").(*gorm.DB)
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	// Fetch the gift and guest from the database
+	var gift models.Gift
+	if err := db.First(&gift, input.GiftID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Gift not found"})
+
+		return
+	}
+
+	var guest models.Guest
+	if err := db.Select("first_name, last_name, email").Where("email = ?", input.Email).First(&guest).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// Create a new guest if not found
+			newGuest := models.Guest{
+				FirstName: input.GuestName,
+				LastName:  input.GuestLastName,
+				Email:     input.Email,
+			}
+			if err := db.Create(&newGuest).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create guest"})
+				return
+			}
+			// Fetch the newly created guest to ensure it's properly assigned
+			if err := db.Where("email = ?", input.Email).First(&guest).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch newly created guest"})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch guest"})
+			return
+		}
+	}
+
+	response, err := payments.CreatePreference(c.MustGet("config").(config.Config).MercadoPagoKey, gift)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create payment preference"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Payment preference created successfully",
+		"preference": gin.H{
+			"id":                 response.ID,
+			"init_point":         response.InitPoint,
+			"external_reference": response.ExternalReference,
+			"items":              response.Items,
+			"back_urls":          response.BackURLs,
+			"auto_return":        response.AutoReturn,
+			"payer":              response.Payer,
+			"notification_url":   response.NotificationURL,
+		},
+	})
+}
+
 func GenerateGiftPayment(c *gin.Context) {
 	var input BuyGiftInput
 	mercadoPagoKey := c.MustGet("config").(config.Config).MercadoPagoKey

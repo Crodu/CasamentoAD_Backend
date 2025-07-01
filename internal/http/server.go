@@ -59,28 +59,9 @@ func InitServer() {
 	r.GET("/guests/:id", GetGuestByID)
 	r.POST("/guests", CreateGuest)
 	r.POST("/ordergift", GenerateGiftPayment)
+	r.POST("/preference", GeneratePreference)
 	r.POST("/confirmpayment", ConfirmPayment)
-	// r.GET("/paymenttest", func(c *gin.Context) {
-	// 	response, err := payments.GeneratePayment()
-	// 	if err != nil {
-	// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate payment"})
-	// 		return
-	// 	}
-	// 	var parsed map[string]interface{}
-	// 	if err := json.Unmarshal(response, &parsed); err != nil {
-	// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse payment response"})
-	// 		return
-	// 	}
-	// 	c.JSON(http.StatusOK, parsed)
-	// })
-	// r.GET("/sendmail", func(c *gin.Context) {
-	// 	err := messaging.SendMail()
-	// 	if err != nil {
-	// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send email"})
-	// 		return
-	// 	}
-	// 	c.JSON(http.StatusOK, gin.H{"message": "Email sent successfully"})
-	// })
 
+	r.POST("/upload", UploadFileToS3)
 	r.Run() // Default listens on :8080
 }
