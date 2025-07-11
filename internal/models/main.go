@@ -21,18 +21,19 @@ type UserInput struct {
 
 type Guest struct {
 	ID           int       `json:"id" gorm:"primaryKey" gorm:"autoIncrement"`
-	FirstName    string    `json:"first_name"`
-	LastName     string    `json:"last_name"`
+	Name         string    `json:"name"`
 	Email        string    `json:"email"`
+	CPF          string    `json:"cpf"`
+	Phone        string    `json:"phone"`
 	Confirmation bool      `json:"confirmation"`
 	CreatedAt    time.Time `json:"created_at" gorm:"autoCreateTime" gorm:"default:CURRENT_TIMESTAMP"`
 	UpdatedAt    time.Time `json:"updated_at" gorm:"autoUpdateTime" gorm:"default:CURRENT_TIMESTAMP"`
 }
 
 type GuestInput struct {
-	FirstName string `json:"first_name" binding:"required"`
-	LastName  string `json:"last_name" binding:"required"`
-	Email     string `json:"email" binding:"required,email"`
+	Name  string `json:"name" binding:"required"`
+	CPF   string `json:"cpf" binding:"required"`
+	Phone string `json:"phone"`
 }
 
 type Gift struct {
@@ -86,4 +87,13 @@ type Payment struct {
 type PaymentInput struct {
 	GuestID int `json:"guest_id" binding:"required"`
 	GiftID  int `json:"gift_id" binding:"required"`
+}
+
+type Invite struct {
+	ID        int       `json:"id" gorm:"primaryKey" gorm:"autoIncrement"`
+	UUID      string    `json:"uuid" gorm:"uniqueIndex"`
+	GuestID   int       `json:"guest_id"`
+	Guest     *Guest    `json:"guest,omitempty" gorm:"foreignKey:GuestID"`
+	CreatedAt time.Time `json:"created_at" gorm:"autoCreateTime" gorm:"default:CURRENT_TIMESTAMP"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"autoUpdateTime" gorm:"default:CURRENT_TIMESTAMP"`
 }

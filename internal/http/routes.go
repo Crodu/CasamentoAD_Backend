@@ -1,9 +1,7 @@
 package http
 
 import (
-	"encoding/json"
 	"net/http"
-	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -12,6 +10,7 @@ import (
 	"github.com/Crodu/CasamentoBackend/internal/models"
 	"github.com/Crodu/CasamentoBackend/internal/payments"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // Assuming db is a global variable for database connection
@@ -85,26 +84,26 @@ func GetGuestByID(c *gin.Context) {
 	c.JSON(http.StatusOK, guest)
 }
 
-func CreateGuest(c *gin.Context) {
-	var guest models.GuestInput
-	db := c.MustGet("db").(*gorm.DB)
-	if err := c.ShouldBindJSON(&guest); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-		return
-	}
+// func CreateGuest(c *gin.Context) {
+// 	var guest models.GuestInput
+// 	db := c.MustGet("db").(*gorm.DB)
+// 	if err := c.ShouldBindJSON(&guest); err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+// 		return
+// 	}
 
-	newGuest := models.Guest{
-		FirstName: guest.FirstName,
-		LastName:  guest.LastName,
-		Email:     guest.Email,
-	}
+// 	newGuest := models.Guest{
+// 		FirstName: guest.FirstName,
+// 		LastName:  guest.LastName,
+// 		Email:     guest.Email,
+// 	}
 
-	if err := db.Create(&newGuest).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create guest"})
-		return
-	}
-	c.JSON(http.StatusCreated, guest)
-}
+// 	if err := db.Create(&newGuest).Error; err != nil {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create guest"})
+// 		return
+// 	}
+// 	c.JSON(http.StatusCreated, guest)
+// }
 
 func GetAllGifts(c *gin.Context) {
 	db := c.MustGet("db").(*gorm.DB)
@@ -242,10 +241,11 @@ func CreateBoughtGift(c *gin.Context) {
 }
 
 type BuyGiftInput struct {
-	GiftID        uint   `json:"gift_id"`
-	GuestName     string `json:"guest_name"`
-	GuestLastName string `json:"guest_last_name"`
-	Email         string `json:"email"`
+	GiftID    uint   `json:"gift_id"`
+	GuestName string `json:"guest_name"`
+	Email     string `json:"email"`
+	CPF       string `json:"cpf"`
+	Phone     string `json:"phone"`
 }
 
 func GeneratePreference(c *gin.Context) {
@@ -269,9 +269,10 @@ func GeneratePreference(c *gin.Context) {
 		if err == gorm.ErrRecordNotFound {
 			// Create a new guest if not found
 			newGuest := models.Guest{
-				FirstName: input.GuestName,
-				LastName:  input.GuestLastName,
-				Email:     input.Email,
+				Name:  input.GuestName,
+				Email: input.Email,
+				CPF:   input.CPF,
+				Phone: input.Phone,
 			}
 			if err := db.Create(&newGuest).Error; err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create guest"})
@@ -307,110 +308,6 @@ func GeneratePreference(c *gin.Context) {
 		},
 	})
 }
-
-func GenerateGiftPayment(c *gin.Context) {
-	var input BuyGiftInput
-	mercadoPagoKey := c.MustGet("config").(config.Config).MercadoPagoKey
-	db := c.MustGet("db").(*gorm.DB)
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
-		return
-	}
-
-	// Fetch the gift and guest from the database
-	var gift models.Gift
-	if err := db.First(&gift, input.GiftID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Gift not found"})
-
-		return
-	}
-
-	var guest models.Guest
-	if err := db.Select("first_name, last_name, email").Where("email = ?", input.Email).First(&guest).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			// Create a new guest if not found
-			newGuest := models.Guest{
-				FirstName: input.GuestName,
-				LastName:  input.GuestLastName,
-				Email:     input.Email,
-			}
-			if err := db.Create(&newGuest).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create guest"})
-				return
-			}
-			// Fetch the newly created guest to ensure it's properly assigned
-			if err := db.Where("email = ?", input.Email).First(&guest).Error; err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch newly created guest"})
-				return
-			}
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch guest"})
-			return
-		}
-	}
-
-	// Generate payment using Mercado Pago (or any other payment service)
-	// Check for existing pending payment
-	var existingPayment models.Payment
-	err := db.Where("gift_id = ? AND guest_id = ? AND status = ?", gift.ID, guest.ID, "pending").First(&existingPayment).Error
-	if err == nil {
-		// Pending payment found, return its details
-		c.JSON(http.StatusOK, gin.H{
-			"message": "Existing pending payment found",
-			"qrcode":  existingPayment.QRCode,
-			"payment": gin.H{ // Reconstruct a minimal payment response
-				"id": existingPayment.PaymentID,
-				"transaction_details": gin.H{
-					"external_resource_url": existingPayment.Link,
-				},
-			},
-		})
-		return
-	} else if err != gorm.ErrRecordNotFound {
-		// An error occurred other than not finding a record
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check for existing payments"})
-		return
-	}
-
-	// No pending payment found, proceed to generate a new one
-	response, err := payments.GeneratePayment(gift.Price, input.Email, guest.FirstName, guest.LastName, gift.Name, mercadoPagoKey)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate payment"})
-		return
-	}
-
-	qrcode, err := payments.GetQRCode(response)
-	if err := db.Create(&models.Payment{
-		GuestID:   guest.ID,
-		GiftID:    gift.ID,
-		PaymentID: strconv.Itoa(response.ID),
-		QRCode:    qrcode,
-		Status:    "pending",
-		Link:      response.TransactionDetails.ExternalResourceURL,
-	}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create payment"})
-		return
-	}
-
-	jsonPayment, err := json.Marshal(response)
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Payment generated successfully",
-		"qrcode":  qrcode,
-		"payment": jsonPayment,
-	})
-}
-
-// paymentdata = {
-//   action: "payment.updated",
-//   api_version: "v1",
-//   data: {"id":"123456"},
-//   date_created: "2021-11-01T02:02:02Z",
-//   id: "123456",
-//   live_mode: false,
-//   type: "payment",
-//   user_id: 278927631
-// }
 
 type PaymentWebhook struct {
 	Action     string `json:"action"`
@@ -503,4 +400,102 @@ func CancelPaymentIfTimeout(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Payment canceled successfully"})
+}
+
+// create blank invite without guestid
+func CreateInvite(c *gin.Context) {
+	db := c.MustGet("db").(*gorm.DB)
+
+	var input struct {
+		UUID string `json:"uuid"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	uuidValue := input.UUID
+	if uuidValue == "" {
+		uuidValue = uuid.New().String()
+	}
+
+	invite := models.Invite{
+		UUID:      uuidValue,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	if err := db.Create(&invite).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create invite"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, invite)
+}
+
+func GetInviteByUUID(c *gin.Context) {
+	uuid := c.Param("uuid")
+	db := c.MustGet("db").(*gorm.DB)
+	var invite models.Invite
+	if err := db.Where("uuid = ?", uuid).First(&invite).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Invite not found"})
+		return
+	}
+	c.JSON(http.StatusOK, invite)
+}
+
+func UpdateInviteGuest(c *gin.Context) {
+	uuid := c.Param("uuid")
+	var input models.GuestInput
+	db := c.MustGet("db").(*gorm.DB)
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
+		return
+	}
+
+	var invite models.Invite
+	if err := db.Where("uuid = ?", uuid).First(&invite).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Invite not found"})
+		return
+	}
+
+	// Create guest if it doesn't exist
+	var guest models.Guest
+	if err := db.Where("cpf = ?", input.CPF).First(&guest).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			// Create a new guest
+			guest = models.Guest{
+				Name:  input.Name,
+				CPF:   input.CPF,
+				Phone: input.Phone,
+			}
+			if err := db.Create(&guest).Error; err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create guest"})
+				return
+			}
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch guest"})
+			return
+		}
+	}
+
+	// Update the invite with the guest ID
+	invite.GuestID = guest.ID
+	invite.UpdatedAt = time.Now()
+	if err := db.Save(&invite).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update invite"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Invite updated successfully", "invite": invite})
+}
+
+func GetAllInvitesWithGuests(c *gin.Context) {
+	db := c.MustGet("db").(*gorm.DB)
+	var invites []models.Invite
+	if err := db.Preload("Guest").Find(&invites).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch invites"})
+		return
+	}
+	c.JSON(http.StatusOK, invites)
 }

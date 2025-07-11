@@ -57,10 +57,14 @@ func InitServer() {
 	r.POST("/login", Login)
 	r.GET("/guests", GetAllGuests)
 	r.GET("/guests/:id", GetGuestByID)
-	r.POST("/guests", CreateGuest)
-	r.POST("/ordergift", GenerateGiftPayment)
+	// r.POST("/guests", CreateGuest)
+	// r.POST("/ordergift", GenerateGiftPayment)
 	r.POST("/preference", GeneratePreference)
 	r.POST("/confirmpayment", ConfirmPayment)
+	r.GET("/invites/all", GetAllInvitesWithGuests)
+	r.GET("/invites/:uuid", GetInviteByUUID)
+	r.POST("/invites/:uuid/guest", UpdateInviteGuest)
+	r.POST("/invites", CreateInvite)
 
 	r.POST("/upload", UploadFileToS3)
 	r.Run() // Default listens on :8080
