@@ -3,3 +3,6 @@
 ./etc.txt
 etc.txt
 tmp/*
+test.db
+tmp/main.exe
+tmp/build-errors.log
