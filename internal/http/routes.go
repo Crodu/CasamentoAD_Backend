@@ -111,7 +111,7 @@ func GetAllGifts(c *gin.Context) {
 	// Use a join to fetch gifts along with their bought status
 	var giftResponses []models.GiftResponse
 	if err := db.Table("gifts").
-		Select(`gifts.id, gifts.name, gifts.description, gifts.price, gifts.link, guests.first_name AS bought_by`).
+		Select(`gifts.id, gifts.name, gifts.description, gifts.price, gifts.link, guests.name AS bought_by`).
 		Joins("LEFT JOIN bought_gifts ON gifts.id = bought_gifts.gift_id").
 		Joins("LEFT JOIN guests ON bought_gifts.guest_id = guests.id").
 		Scan(&giftResponses).Error; err != nil {
