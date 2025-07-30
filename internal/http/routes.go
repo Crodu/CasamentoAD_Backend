@@ -265,7 +265,7 @@ func GeneratePreference(c *gin.Context) {
 	}
 
 	var guest models.Guest
-	if err := db.Select("first_name, last_name, email").Where("email = ?", input.Email).First(&guest).Error; err != nil {
+	if err := db.Select("name, email").Where("email = ?", input.Email).First(&guest).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			// Create a new guest if not found
 			newGuest := models.Guest{
